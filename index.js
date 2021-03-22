@@ -2,6 +2,7 @@ const Discord = require('discord.js')
 const wokcommands = require('wokcommands')
 const colors = require('colors')
 require('dotenv').config()
+const { io } = require('./server/server')
 
 colors.setTheme({
     silly: 'rainbow',
