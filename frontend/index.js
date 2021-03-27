@@ -1,8 +1,6 @@
-const BG_COLOUR = '#231f20';
-const SNAKE_COLOUR = '#c2c2c2';
-const FOOD_COLOUR = '#e66916';
+const BG_COLOUR = 'white';
 
-const socket = io('https://sleepy-island-33889.herokuapp.com/');
+const socket = io('ws://localhost:3000');
 
 socket.on('init', handleInit);
 socket.on('gameState', handleGameState);
@@ -13,27 +11,158 @@ socket.on('tooManyPlayers', handleTooManyPlayers);
 
 const gameScreen = document.getElementById('gameScreen');
 const initialScreen = document.getElementById('initialScreen');
-const newGameBtn = document.getElementById('newGameButton');
-const joinGameBtn = document.getElementById('joinGameButton');
-const gameCodeInput = document.getElementById('gameCodeInput');
-const gameCodeDisplay = document.getElementById('gameCodeDisplay');
+const bodyPartDisplay = document.getElementById('bodyPartDisplay');
+const doneButton = document.getElementById('doneButton')
+const canvas = document.getElementById('canvas');
+  ctx = canvas.getContext('2d');
 
-newGameBtn.addEventListener('click', newGame);
-joinGameBtn.addEventListener('click', joinGame);
+let queuePos
+let images = {}
 
+var flag = false,
+        prevX = 0,
+        currX = 0,
+        prevY = 0,
+        currY = 0,
+        dot_flag = false;
 
-function newGame() {
-  socket.emit('newGame');
+    var x = "black",
+        y = 2;
+    
+    function initDraw() {
+        w = canvas.width;
+        h = canvas.height;
+    
+        canvas.addEventListener("mousemove", function (e) {
+            findxy('move', e)
+        }, false);
+        canvas.addEventListener("mousedown", function (e) {
+            findxy('down', e)
+        }, false);
+        canvas.addEventListener("mouseup", function (e) {
+            findxy('up', e)
+        }, false);
+        canvas.addEventListener("mouseout", function (e) {
+            findxy('out', e)
+        }, false);
+    }
+    
+    function color(obj) {
+        switch (obj.id) {
+            case "green":
+                x = "green";
+                break;
+            case "blue":
+                x = "blue";
+                break;
+            case "red":
+                x = "red";
+                break;
+            case "yellow":
+                x = "yellow";
+                break;
+            case "orange":
+                x = "orange";
+                break;
+            case "black":
+                x = "black";
+                break;
+            case "white":
+                x = "white";
+                break;
+        }
+        if (x == "white") y = 14;
+        else y = 2;
+    
+    }
+    
+    function draw() {
+        ctx.beginPath();
+        ctx.moveTo(prevX, prevY);
+        ctx.lineTo(currX, currY);
+        ctx.strokeStyle = x;
+        ctx.lineWidth = y;
+        ctx.stroke();
+        ctx.closePath();
+    }
+    
+    function erase() {
+        var m = confirm("Want to clear");
+        if (m) {
+            ctx.clearRect(0, 0, w, h);
+            document.getElementById("canvasimg").style.display = "none";
+        }
+    }
+    
+    function save() {
+        document.getElementById("canvasimg").style.border = "2px solid";
+        var dataURL = canvas.toDataURL();
+        document.getElementById("canvasimg").src = dataURL;
+        document.getElementById("canvasimg").style.display = "inline";
+    }
+    
+    function findxy(res, e) {
+        if (res == 'down') {
+            prevX = currX;
+            prevY = currY;
+            currX = e.clientX - canvas.offsetLeft;
+            currY = e.clientY - canvas.offsetTop;
+    
+            flag = true;
+            dot_flag = true;
+            if (dot_flag) {
+                ctx.beginPath();
+                ctx.fillStyle = x;
+                ctx.fillRect(currX, currY, 2, 2);
+                ctx.closePath();
+                dot_flag = false;
+            }
+        }
+        if (res == 'up' || res == "out") {
+            flag = false;
+        }
+        if (res == 'move') {
+            if (flag) {
+                prevX = currX;
+                prevY = currY;
+                currX = e.clientX - canvas.offsetLeft;
+                currY = e.clientY - canvas.offsetTop;
+                draw();
+            }
+        }
+    }
+
+function getParameterByName(name, url = window.location.href) {
+  name = name.replace(/[\[\]]/g, '\\$&');
+  var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)'),
+      results = regex.exec(url);
+  if (!results) return null;
+  if (!results[2]) return '';
+  return decodeURIComponent(results[2].replace(/\+/g, ' '));
+}
+
+let roomName = getParameterByName("roomName")
+let ishost = getParameterByName("ishost")
+
+function newGame(roomName) {
+  socket.emit('newGame', roomName);
   init();
 }
 
-function joinGame() {
-  const code = gameCodeInput.value;
-  socket.emit('joinGame', code);
+function joinGame(roomName) {
+  socket.emit('joinGame', roomName);
   init();
 }
 
-let canvas, ctx;
+if (roomName) {
+  setTimeout(() => {
+    if (ishost == 'true') { newGame(roomName) } else
+    joinGame(roomName)
+  }, 300);
+  
+}
+
+
 let playerNumber;
 let gameActive = false;
 
@@ -41,48 +170,34 @@ function init() {
   initialScreen.style.display = "none";
   gameScreen.style.display = "block";
 
-  canvas = document.getElementById('canvas');
-  ctx = canvas.getContext('2d');
+  
 
-  canvas.width = canvas.height = 600;
-
-  ctx.fillStyle = BG_COLOUR;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  document.addEventListener('keydown', keydown);
   gameActive = true;
 }
 
-function keydown(e) {
-  socket.emit('keydown', e.keyCode);
-}
-
 function paintGame(state) {
-  ctx.fillStyle = BG_COLOUR;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const food = state.food;
-  const gridsize = state.gridsize;
-  const size = canvas.width / gridsize;
+  if (state.players[queuePos].isDrawing) {
+    canvas.style.display = 'block'
+    canvas.width = canvas.height = 600;
 
-  ctx.fillStyle = FOOD_COLOUR;
-  ctx.fillRect(food.x * size, food.y * size, size, size);
-
-  paintPlayer(state.players[0], size, SNAKE_COLOUR);
-  paintPlayer(state.players[1], size, 'red');
-}
-
-function paintPlayer(playerState, size, colour) {
-  const snake = playerState.snake;
-
-  ctx.fillStyle = colour;
-  for (let cell of snake) {
-    ctx.fillRect(cell.x * size, cell.y * size, size, size);
+    ctx.fillStyle = BG_COLOUR;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = BG_COLOUR;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    doneButton.style.display = 'block'
+    doneButton.addEventListener('click', done);
+    initDraw()
+  } else {
+    doneButton.style.display = 'none'
+    canvas.style.display = 'none'
   }
 }
 
-function handleInit(number) {
-  playerNumber = number;
+function handleInit(roomName, queue, gameState) {
+  queuePos = queue[roomName].indexOf(socket.id)
+  bodyPart = gameState.players[queuePos].bodyPart
+  bodyPartDisplay.innerText = `Ты рисуешь: ${bodyPart}`
 }
 
 function handleGameState(gameState) {
@@ -93,23 +208,18 @@ function handleGameState(gameState) {
   requestAnimationFrame(() => paintGame(gameState));
 }
 
-function handleGameOver(data) {
-  if (!gameActive) {
-    return;
-  }
-  data = JSON.parse(data);
-
-  gameActive = false;
-
-  if (data.winner === playerNumber) {
-    alert('Ты выиграл');
-  } else {
-    alert('Ты проиграл');
-  }
+function handleGameOver(roomName, images) {
+  console.log(images)
 }
 
-function handleGameCode(gameCode) {
-  gameCodeDisplay.innerText = gameCode;
+function handleGameCode(roomName) {
+  
+}
+
+function done() {
+  console.log(1)
+  image = canvas.toDataURL()
+  socket.emit('done', socket.id, image) 
 }
 
 function handleUnknownCode() {
@@ -124,7 +234,6 @@ function handleTooManyPlayers() {
 
 function reset() {
   playerNumber = null;
-  gameCodeInput.value = '';
   initialScreen.style.display = "block";
   gameScreen.style.display = "none";
 }

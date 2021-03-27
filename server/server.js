@@ -4,28 +4,31 @@ const express = require('express')
 const app = express()
 const server = http.createServer(app)
 const io = require('socket.io')(server)
+const { EventEmitter } = require("events");
+
+const GameOverEmitter = new EventEmitter();
 
 app.use(express.static(path.join(__dirname, '../frontend')))
 
-const { initGame, gameLoop, getUpdatedVelocity } = require('./game');
+const { shuffleArray } = require('./utils')
+const { initGame, gameLoop } = require('./game');
 const { FRAME_RATE } = require('./constants');
-const { makeid } = require('./utils');
 
+const images = {};
 const state = {};
 const clientRooms = {};
+const queue = {};
 
-io.on('connection', client => {
-
-  client.on('keydown', handleKeydown);
-  client.on('newGame', handleNewGame);
-  client.on('joinGame', handleJoinGame);
+io.on('connection', ioClient => {
+  ioClient.on('newGame', handleNewGame);
+  ioClient.on('joinGame', handleJoinGame);
+  ioClient.on('done', handleDone);
 
   function handleJoinGame(roomName) {
-    const room = io.sockets.adapter.rooms[roomName];
-
+    const roomSet = io.sockets.adapter.rooms.get(roomName)
     let allUsers;
-    if (room) {
-      allUsers = room.sockets;
+    if (roomSet) {
+      allUsers = Object.assign({}, ...Array.from(roomSet, value => ({ [value]: 'not assigned' })));
     }
 
     let numClients = 0;
@@ -34,56 +37,65 @@ io.on('connection', client => {
     }
 
     if (numClients === 0) {
-      client.emit('unknownCode');
+      ioClient.emit('unknownCode');
       return;
-    } else if (numClients > 1) {
-      client.emit('tooManyPlayers');
+    } else if (numClients > 2) {
+      ioClient.emit('tooManyPlayers');
       return;
-    }
-
-    clientRooms[client.id] = roomName;
-
-    client.join(roomName);
-    client.number = 2;
-    client.emit('init', 2);
+    } 
     
-    startGameInterval(roomName);
+    clientRooms[ioClient.id] = roomName;
+
+    ioClient.join(roomName);
+    ioClient.number = numClients + 1;
+    numClients = numClients + 1
+
+    if (numClients === 3) {
+      
+      queue[roomName] = getRandomQueue(Object.assign({}, ...Array.from(io.sockets.adapter.rooms.get(roomName), value => ({ [value]: 'not assigned' }))))
+      state[roomName] = initGame()
+      io.to(roomName).emit('init', roomName, queue, state[roomName]);
+      
+      
+      startGameInterval(roomName);
+
+    }
+    
   }
 
-  function handleNewGame() {
-    let roomName = makeid(5);
-    clientRooms[client.id] = roomName;
-    client.emit('gameCode', roomName);
-
-    state[roomName] = initGame();
-
-    client.join(roomName);
-    client.number = 1;
-    client.emit('init', 1);
+  function handleNewGame(roomName) {
+    clientRooms[ioClient.id] = roomName;
+    ioClient.emit('gameCode', roomName);
+    ioClient.join(roomName);
+    numClients = 1
+    ioClient.number = 1;
   }
 
-  function handleKeydown(keyCode) {
-    const roomName = clientRooms[client.id];
-    if (!roomName) {
-      return;
+  function handleDone(id, image) {
+    
+    roomName = clientRooms[id]
+    
+    queuePos = queue[roomName].indexOf(id)
+    if (images[roomName]) { images[roomName].push(image) } else {
+      images[roomName] = []
+      images[roomName][0] = image
     }
-    try {
-      keyCode = parseInt(keyCode);
-    } catch(e) {
-      console.error(e);
-      return;
+    
+    
+    state[roomName].players[queuePos].isDrawing = false
+    if (state[roomName].players[queuePos + 1]) {
+      state[roomName].players[queuePos + 1].isDrawing = true
+      emitGameState(roomName, state[roomName])
+    } else {
+      emitGameOver(roomName, images)
     }
-
-    const vel = getUpdatedVelocity(keyCode);
-
-    if (vel) {
-      state[roomName].players[client.number - 1].vel = vel;
-    }
+       
   }
 });
 
 function startGameInterval(roomName) {
-  const intervalId = setInterval(() => {
+  state[roomName].players[0].isDrawing = true
+  
     const winner = gameLoop(state[roomName]);
     
     if (!winner) {
@@ -91,9 +103,9 @@ function startGameInterval(roomName) {
     } else {
       emitGameOver(roomName, winner);
       state[roomName] = null;
-      clearInterval(intervalId);
+      
     }
-  }, 1000 / FRAME_RATE);
+
 }
 
 function emitGameState(room, gameState) {
@@ -102,10 +114,19 @@ function emitGameState(room, gameState) {
     .emit('gameState', JSON.stringify(gameState));
 }
 
-function emitGameOver(room, winner) {
+function emitGameOver(room, images) {
   io.sockets.in(room)
-    .emit('gameOver', JSON.stringify({ winner }));
+    .emit('gameOver');
+  GameOverEmitter.emit('gayOver', images)
+  console.log('over')
+}
+
+function getRandomQueue(allUsers) {
+  return shuffleArray(Object.keys(allUsers))
 }
 
 server.listen(3000);
-console.log('серв запущен')
+
+module.exports = {
+  GameOverEmitter
+}
