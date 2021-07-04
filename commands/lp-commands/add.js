@@ -8,7 +8,6 @@ module.exports = {
     name: 'Add sound',
     aliases: ['add'], 
     category: 'Configuration',
-    permissions: ['ADMINISTRATOR'],
     description: 'Adds new sound to soundpad',
     expectedArgs: '<URL> <name>',
     minArgs: 2,
