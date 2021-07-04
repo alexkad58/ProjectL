@@ -1,12 +1,13 @@
-const express = require('express')
-const server = express()
-server.all('/', (req, res)=>{
-    res.send('Your bot is alive!')
-})
-server.listen(3000, ()=>{console.log("Server is Ready!")});
+// const express = require('express')
+// const server = express()
+// server.all('/', (req, res)=>{
+//     res.send('Your bot is alive!')
+// })
+// server.listen(3000, ()=>{console.log("Server is Ready!")});
 
 const Discord = require('discord.js')
 const WOKcommands = require('wokcommands')
+const dashboard = require("discord-bot-dashboard")
 
 require('dotenv').config()
 
@@ -18,6 +19,13 @@ const client = new Discord.Client({
 require('discord-buttons')(client)
 
 client.on('ready', () => {
+	
+    dashboard.run(client, {
+        port: 3000, 
+        clientSecret: process.env.CLIENT_SECRET, 
+        redirectURI: process.env.REDIRECT_URI
+      })
+	
     console.log(`\nКлиент запущен!\n`)
 
     const dbOptions = {
