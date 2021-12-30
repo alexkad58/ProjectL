@@ -16,8 +16,11 @@ module.exports = {
         
         const { guild, channel } = message
         if (channel.id != cache[guild.id].config) return message.react('🚫')
+
+        const enUrl = en(args[0])
+        if (enUrl.length > 95) return message.reply('URL is too big')
         
-        const newSound = { url: en(args[0]), name: args[1] }
+        const newSound = { url: enUrl, name: args[1] }
 
         updateSoundPad({ newSound, guildId: guild.id, client })
     } 

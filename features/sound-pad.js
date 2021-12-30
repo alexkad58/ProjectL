@@ -77,7 +77,7 @@ const sendSounds = (channel, { sounds, toDelete }) => {
     if (components[0].components.length) channel.send('Sounds:', { components })
 }
 
-const updateSoundPad = async ({ newSound, deletedSound, guildId, client }) => {
+const updateSoundPad = async ({ newSound, deletedSounds, guildId, client }) => {
 
     const guild = client.guilds.cache.get(guildId)
     if (!guild) return
@@ -91,11 +91,11 @@ const updateSoundPad = async ({ newSound, deletedSound, guildId, client }) => {
         sendSounds(soundsChannel, res)
     }
 
-    if (deletedSound) {
+    if (deletedSounds) {
         res = await getSounds(soundsChannel)
 
         res.sounds.forEach((sound, index) => {
-            if (sound.name === deletedSound) res.sounds.splice(index, 1)
+            if (deletedSounds.includes(sound.name)) res.sounds.splice(index, 1)
         })
 
         sendSounds(soundsChannel, res)
@@ -129,5 +129,7 @@ module.exports.config = {
 module.exports.fetch = fetchData
 
 module.exports.updateSoundPad = updateSoundPad
+
+module.exports.getSounds = getSounds
 
 module.exports.cache = cache
